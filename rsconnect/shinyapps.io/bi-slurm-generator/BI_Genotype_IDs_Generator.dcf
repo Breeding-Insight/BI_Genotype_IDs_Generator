@@ -1,0 +1,12 @@
+name: BI_Genotype_IDs_Generator
+title: BI_Genotype_IDs_Generator
+username: bi-slurm-generator
+account: bi-slurm-generator
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14952035
+bundleId: 10958423
+url: https://bi-jcv.shinyapps.io/BI_Genotype_IDs_Generator/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
