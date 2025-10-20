@@ -10,7 +10,7 @@ ui <- fluidPage(
   
   # Image header
   div(class = "logo-header",
-      tags$img(src = "logos.png", height = "100px")
+      tags$img(src = "logos2.png", height = "100px")
   ),
   
   titlePanel("DArTag Plate Formatter"),
@@ -18,7 +18,7 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       fileInput("dartfile", "Upload your DArT Submission file", accept = ".csv"),
-      textInput("outname", "Enter the base name for output files", value = "ENTER STANDARDIZED BI PROJECT NAME"),
+      textInput("outname", "Enter the base name for output files", placeholder = "ENTER PROJECT NAME", value = ""),
       
       h4("Download Options"),
       downloadButton("download_all", "Download Tracking Files (.zip)")
@@ -40,8 +40,17 @@ server <- function(input, output, session) {
   
   processed <- reactive({
     raw_data() %>%
+      # Keep original Genotype for Breeder_IDs
+      mutate(Breeder_IDs = Genotype) %>%  
+      # Clean only relevant character columns for DArT_IDs
+      mutate(across(
+        c(Genotype, PlateID, Row, Column),  # columns used to build DArT_IDs
+        ~ str_squish(.) %>%                     # trim whitespace
+          str_replace_all("[^\\x20-\\x7E]", "") %>%  # remove non-ASCII
+          str_replace_all("[^A-Za-z0-9_]", "")       # remove symbols like # ? % @
+      )) %>%
       mutate(
-        PlateID = as.character(PlateID),   # allow Y1, Y2, etc.
+        PlateID = as.character(PlateID),        # allow Y1, Y2, etc.
         Column = str_pad(as.integer(Column), width = 2, pad = "0"),
         DArT_IDs = paste(
           "S",
@@ -56,13 +65,12 @@ server <- function(input, output, session) {
   processed_only <- reactive({
     processed() %>%
       mutate(Genotype = DArT_IDs) %>%   # overwrite Genotype column
-      select(-DArT_IDs)                 # drop helper column
+      select(-DArT_IDs, -Breeder_IDs)   # drop helper columns
   })
   
   processed_both <- reactive({
     processed() %>%
-      rename(originalIDs = Genotype) %>%
-      relocate(originalIDs, DArT_IDs)   # put IDs at front
+      select(DArT_IDs, Breeder_IDs, everything())   # keep both IDs at front
   })
   
   # Keep preview same as before (processed file)
@@ -78,9 +86,9 @@ server <- function(input, output, session) {
     content = function(file) {
       # Temporary files
       tmpdir <- tempdir()
-      original_file <- file.path(tmpdir, paste0(input$outname, "_originalIDs.csv"))
-      processed_file <- file.path(tmpdir, paste0(input$outname, "_processedIDs.csv"))
-      both_file <- file.path(tmpdir, paste0(input$outname, "_bothIDs.csv"))
+      original_file <- file.path(tmpdir, paste0(input$outname, "_Breeder_IDs.csv"))
+      processed_file <- file.path(tmpdir, paste0(input$outname, "_DArT_IDs.csv"))
+      both_file <- file.path(tmpdir, paste0(input$outname, "_ID_key.csv"))
       
       # Write CSVs
       raw_data() %>% write_csv(original_file)
