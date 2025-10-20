@@ -10,7 +10,7 @@ ui <- fluidPage(
   
   # Image header
   div(class = "logo-header",
-      tags$img(src = "logos.png", height = "100px")
+      tags$img(src = "logos2.png", height = "100px")
   ),
   
   titlePanel("DArTag Plate Formatter"),
