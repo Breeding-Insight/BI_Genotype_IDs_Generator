@@ -1,2 +1,2 @@
-# BI_Genotype_IDs_Generator
-ShinyApp to generate sample tracking files needed for BI-DArT workflow
+# NameDroppR
+ShinyApp used to convert breeder IDs to DArT IDs in sample tracking file
