@@ -13,15 +13,15 @@ ui <- fluidPage(
       tags$img(src = "logos2.png", height = "100px")
   ),
   
-  titlePanel("DArTag Plate Formatter"),
+  titlePanel("Convert Breeder_ID to DArT_ID"),
   
   sidebarLayout(
     sidebarPanel(
-      fileInput("dartfile", "Upload your DArT Submission file", accept = ".csv"),
+      fileInput("dartfile", "Upload your DArT tracking sample file", accept = ".csv"),
       textInput("outname", "Enter the base name for output files", placeholder = "ENTER PROJECT NAME", value = ""),
       
       h4("Download Options"),
-      downloadButton("download_all", "Download Tracking Files (.zip)")
+      downloadButton("download_all", "Download sample tracking files (.zip)")
     ),
     mainPanel(
       h4("Preview of processed data (first 10 rows)"),
