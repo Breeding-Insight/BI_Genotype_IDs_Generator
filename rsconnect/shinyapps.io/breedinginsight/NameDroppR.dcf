@@ -1,0 +1,12 @@
+name: NameDroppR
+title: NameDroppR
+username: breedinginsight
+account: breedinginsight
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15839340
+bundleId: 11071287
+url: https://breedinginsight.shinyapps.io/NameDroppR/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
