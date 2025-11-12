@@ -63,11 +63,15 @@ ui <- fluidPage(
       
       # Brief description text below the tab title but above sidebarLayout
       p("Use this tab to generate a DArT sample tracking file template. 
-        Specify organism, tissue, and the number of plates. 
+        Specify project name, organism, tissue, and the number of plates. 
         The app will automatically add PlateID, Row, and Column information."), 
       
       sidebarLayout(
         sidebarPanel(
+          
+          textInput("project_name", "Project Name",
+                    placeholder = "e.g., CRB007-2025"),
+          
           textInput("organism", "Organism (use the organism's common name)", 
                     placeholder = "e.g., Alfalfa, not Medicago"),
           
@@ -111,12 +115,12 @@ ui <- fluidPage(
       sidebarLayout(
         sidebarPanel(
           fileInput("dartfile", "Upload your DArT tracking sample file", accept = ".csv"),
-          textInput("outname", "Enter the base name for output files", 
-                    placeholder = "ENTER PROJECT NAME", value = ""),
           
           h4("Download"),
-          downloadButton("download_all", "Processed sample tracking files (.zip)")
+          helpText("The Project Name will be automatically extracted from your uploaded filename and added to the processed files."),
+          downloadButton("download_all", "Download sample tracking files (.zip)")
         ),
+        
         mainPanel(
           h4("Preview of processed data (first 12 rows)"),
           tableOutput("preview")
@@ -133,11 +137,33 @@ server <- function(input, output, session) {
   
   # ========== TAB 1: GENERATE DART SAMPLE TRACKING FILE TEMPLATE ==========
   
-  # Reactive validation checker  # <<< ADDED
+  # Reactive validation checker  #
   validation_status <- reactive({
-    # Return list with validation status and message
+    # 1. Check project name FIRST (since it's first in UI)
+    if (is.null(input$project_name) || nchar(trimws(input$project_name)) == 0) {
+      return(list(valid = FALSE, message = "Please enter a project name"))
+    }
     
-    # Check num_plates
+    # Check project name format: XXX###-YYYY
+    project_pattern <- "^[A-Z]{3}[0-9]{3}-[0-9]{4}$"
+    if (!grepl(project_pattern, trimws(input$project_name))) {
+      return(list(valid = FALSE, message = "ERROR: Project name must be in format XXX###-YYYY (e.g., ABC123-2025)"))
+    }
+    
+    # 2. Check organism (second in UI)
+    if (is.null(input$organism) || nchar(trimws(input$organism)) == 0) {
+      return(list(valid = FALSE, message = "Please enter the organism name"))
+    }
+    if (!grepl("^[A-Z]", trimws(input$organism))) {
+      return(list(valid = FALSE, message = "ERROR: Organism name must start with a CAPITAL letter"))
+    }
+    
+    # 3. Check tissue (third in UI)
+    if (is.null(input$tissue) || nchar(trimws(input$tissue)) == 0) {
+      return(list(valid = FALSE, message = "Please select a tissue type"))
+    }
+    
+    # 4. Check num_plates (fourth in UI)
     if (is.null(input$num_plates) || nchar(trimws(input$num_plates)) == 0) {
       return(list(valid = FALSE, message = "Please enter number of plates"))
     }
@@ -149,28 +175,15 @@ server <- function(input, output, session) {
     if (num_plates_value <= 0) {
       return(list(valid = FALSE, message = "Number of plates must be greater than 0"))
     }
-    if (num_plates_value > 20) {
-      return(list(valid = FALSE, message = "Number of plates must be 20 or less"))
-    }
-    
-    # Check organism
-    if (is.null(input$organism) || nchar(trimws(input$organism)) == 0) {
-      return(list(valid = FALSE, message = "Please enter the organism name"))
-    }
-    if (!grepl("^[A-Z]", trimws(input$organism))) {
-      return(list(valid = FALSE, message = "ERROR: Organism name must start with a CAPITAL letter"))
-    }
-    
-    # Check tissue
-    if (is.null(input$tissue) || nchar(trimws(input$tissue)) == 0) {
-      return(list(valid = FALSE, message = "Please select a tissue type"))
+    if (num_plates_value > 100) {
+      return(list(valid = FALSE, message = "Number of plates must be 100 or less"))
     }
     
     # All validations passed
     return(list(valid = TRUE, message = ""))
   })
   
-  # Display validation message  # <<< ADDED
+  # Display validation message
   output$validation_message <- renderUI({
     status <- validation_status()
     if (!status$valid) {
@@ -183,7 +196,7 @@ server <- function(input, output, session) {
     }
   })
   
-  # Conditional download button  # <<< ADDED
+  # Conditional download button
   output$download_button_ui <- renderUI({
     if (validation_status()$valid) {
       downloadButton("download_template", "Download sample tracking file (.csv)")
@@ -236,7 +249,7 @@ server <- function(input, output, session) {
                !(Row == "H" & Column == 12))
       
       # Add PlateID with two-digit formatting
-      plate_layout$PlateID <- paste0("Plate_", sprintf("%02d", plate_num))
+      plate_layout$PlateID <- paste0(plate_num)
       
       # Add other columns
       plate_layout$Organism <- trimws(input$organism)
@@ -270,15 +283,19 @@ server <- function(input, output, session) {
   # Download handler for template
   output$download_template <- downloadHandler(
     filename = function() {
-      num_plates_value <- as.numeric(input$num_plates)
-      paste0("DArT_sample_tracking_file_template_", num_plates_value, "plates_", Sys.Date(), ".csv")
+      paste0(input$project_name, "_sample_tracking.csv")
     },
     content = function(file) {
       df <- generate_template()
-      write.csv(df, file, row.names = FALSE)
+      # Explicitly select only the 8 expected columns in correct order
+      df <- df[, c("PlateID", "Row", "Column", "Organism", 
+                   "Species", "Genotype", "Tissue", "Comments")]
+      
+      write_csv(df, file, na = "")  # <<< CHANGED: use write_csv instead of write.csv
     },
     contentType = "text/csv"
   )
+  
   
   
   # ========== TAB 2: CONVERT BREEDER GENOTYPE IDs TO DART-FRIENDLY IDs ==========
@@ -331,16 +348,23 @@ server <- function(input, output, session) {
   # Single download handler for all files zipped
   output$download_all <- downloadHandler(
     filename = function() {
-      paste0(input$outname, "_tracking_files.zip")
+      # Extract project name from uploaded filename
+      uploaded_name <- input$dartfile$name
+      # Remove "_sample_tracking.csv" or similar suffix to get project code
+      project_code <- sub("_.*", "", uploaded_name)  # Takes everything before first underscore
+      
+      paste0(project_code, "_tracking_files.zip")
     },
     content = function(file) {
-      # Create a temporary directory
-      tmpdir <- tempdir()
+      # Extract project name from uploaded filename
+      uploaded_name <- input$dartfile$name
+      project_code <- sub("_.*", "", uploaded_name)
       
-      # Define full paths for temporary files
-      original_file <- file.path(tmpdir, paste0(input$outname, "_Breeder_IDs_sample_tracking_file.csv"))
-      processed_file <- file.path(tmpdir, paste0(input$outname, "_DArT_IDs_sample_tracking_file.csv"))
-      both_file <- file.path(tmpdir, paste0(input$outname, "_ID_key_file.csv"))
+      # Temporary files
+      tmpdir <- tempdir()
+      original_file <- file.path(tmpdir, paste0(project_code, "_Breeder_IDs_sample_tracking.csv"))
+      processed_file <- file.path(tmpdir, paste0(project_code, "_DArT_IDs_sample_tracking.csv"))
+      both_file <- file.path(tmpdir, paste0(project_code, "_ID_key.csv"))
       
       # Write CSV files with na="" so empty cells stay empty
       raw_data() %>% write_csv(original_file, na = "")
