@@ -178,12 +178,13 @@ server <- function(input, output, session) {
     if (num_plates_value > 100) {
       return(list(valid = FALSE, message = "Number of plates must be 100 or less"))
     }
-    
+    if (num_plates_value != as.integer(num_plates_value)) {
+      return(list(valid = FALSE, message = "Number of plates must be a whole number"))
+    }
     # All validations passed
     return(list(valid = TRUE, message = ""))
   })
-  
-  # Display validation message
+    # Display validation message
   output$validation_message <- renderUI({
     status <- validation_status()
     if (!status$valid) {
@@ -297,12 +298,40 @@ server <- function(input, output, session) {
   )
   
   
-  
   # ========== TAB 2: CONVERT BREEDER GENOTYPE IDs TO DART-FRIENDLY IDs ==========
   
+  # Add at top of server
+  go_proceed <- reactiveVal(FALSE)
+  
+  # Read data (unchanged)
   raw_data <- reactive({
     req(input$dartfile)
-    read_csv(input$dartfile$datapath, show_col_types = FALSE, col_types = cols(.default = "c"))  # <<< FIXED: reads all as character
+    read_csv(input$dartfile$datapath, show_col_types = FALSE, col_types = cols(.default = "c"))
+  })
+  
+  # When a new file is loaded, check for missing Genotype IDs and warn
+  observeEvent(input$dartfile, {
+    df <- raw_data()
+    missing <- any(trimws(as.character(df$Genotype)) == "" | is.na(df$Genotype))
+    # Reset gate on new file
+    go_proceed(FALSE)
+    if (missing) {
+      showModal(modalDialog(
+        title = "Warning",
+        "Genotype IDs missing. Are you sure you want to proceed?",
+        easyClose = FALSE,
+        footer = tagList(
+          actionButton("confirm_proceed", "Proceed"),
+          modalButton("Cancel")
+        )
+      ))
+    }
+  })
+  
+  # User confirms they want to proceed
+  observeEvent(input$confirm_proceed, {
+    removeModal()
+    go_proceed(TRUE)
   })
   
   processed <- reactive({
