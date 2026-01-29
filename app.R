@@ -1,6 +1,8 @@
 # Load required libraries
 library(shiny)
 library(tidyverse)
+library(stringr)
+library(tidyr)
 
 # UI
 ui <- fluidPage(
@@ -334,6 +336,24 @@ server <- function(input, output, session) {
     go_proceed(TRUE)
   })
   
+  observeEvent(raw_data(), {
+    df <- raw_data()
+    if (any(str_detect(df$Comments %>% replace_na(""), "[,()]"))) {
+      showModal(modalDialog(
+        title = "Notice",
+        HTML(
+          paste0(
+            "One or more of the the following characters ",
+            "<span style='color:red; '> , ( ) ! : ' -</span>",
+            " were detected under Comments and will be replaced with underscores"
+          )
+        ),
+        easyClose = TRUE,
+        footer = modalButton("OK")
+      ))
+    }
+  })
+  
   processed <- reactive({
     raw_data() %>%
       # Keep original Genotype for Breeder_IDs
@@ -345,6 +365,15 @@ server <- function(input, output, session) {
           str_replace_all("[^\\x20-\\x7E]", "") %>%  # remove non-ASCII
           str_replace_all("[^A-Za-z0-9_]", "")       # remove symbols like # ? % @
       )) %>%
+      mutate(
+        Comments = if_else(
+          !is.na(Comments) & str_detect(Comments, "[,()!:'\\-]"),
+          Comments %>%
+            str_replace_all("[,()!:'\\-]", "_") %>%  # includes space
+            str_replace_all("_+", "_"),
+          Comments
+        )
+      ) %>%
       mutate(
         PlateID = as.character(PlateID),        # allow Y1, Y2, etc.
         Column = as.character(as.integer(Column)),
