@@ -336,52 +336,38 @@ server <- function(input, output, session) {
     go_proceed(TRUE)
   })
   
-  observeEvent(raw_data(), {
-    df <- raw_data()
-    if (any(str_detect(df$Comments %>% replace_na(""), "[,()]"))) {
-      showModal(modalDialog(
-        title = "Notice",
-        HTML(
-          paste0(
-            "One or more of the the following characters ",
-            "<span style='color:red; '> , ( ) ! : ' -</span>",
-            " were detected under Comments and will be replaced with underscores"
-          )
-        ),
-        easyClose = TRUE,
-        footer = modalButton("OK")
-      ))
-    }
-  })
-  
   processed <- reactive({
     raw_data() %>%
-      # Keep original Genotype for Breeder_IDs
-      mutate(Breeder_IDs = Genotype) %>%  
-      # Clean only relevant character columns for DArT_IDs
-      mutate(across(
-        c(Genotype, PlateID, Row, Column),  # columns used to build DArT_IDs
-        ~ str_squish(.) %>%                     # trim whitespace
-          str_replace_all("[^\\x20-\\x7E]", "") %>%  # remove non-ASCII
-          str_replace_all("[^A-Za-z0-9_]", "")       # remove symbols like # ? % @
-      )) %>%
+      # 1) Process breeder IDs from original Genotype
       mutate(
-        Comments = if_else(
-          !is.na(Comments) & str_detect(Comments, "[,()!:'\\-]"),
-          Comments %>%
-            str_replace_all("[,()!:'\\-]", "_") %>%  # includes space
-            str_replace_all("_+", "_"),
-          Comments
+        Breeder_IDs = Genotype,  # ORIGINAL breeder ID
+        Genotype_processed = Genotype %>%
+          str_replace_all("/", "-") %>%
+          str_replace_all("[^A-Za-z0-9_]", "_")
+      ) %>%
+      # 2) Replace ; ' " , with spaces in all character columns
+      mutate(
+        across(
+          where(is.character),
+          ~ .x %>%
+            str_replace_all("[;'\",]", " ")
         )
       ) %>%
+      # 3) Coerce PlateID and Column types
       mutate(
-        PlateID = as.character(PlateID),        # allow Y1, Y2, etc.
-        Column = as.character(as.integer(Column)),
+        PlateID = as.character(PlateID),
+        Column  = as.character(Column)
+      ) %>%
+      # 4) Build DArT_IDs from the PROCESSED breeder ID
+      mutate(
         DArT_IDs = paste(
           "S",
-          paste0(Genotype, "_"),
+          paste0(Genotype_processed, "_"),
           PlateID,
-          paste0(Row, Column),
+          paste0(
+            Row,
+            stringr::str_pad(Column, width = 2, pad = "0")
+          ),
           sep = "_"
         )
       )
@@ -389,13 +375,23 @@ server <- function(input, output, session) {
   
   processed_only <- reactive({
     processed() %>%
-      mutate(Genotype = DArT_IDs) %>%   # overwrite Genotype column
-      select(-DArT_IDs, -Breeder_IDs)   # drop helper columns
+      mutate(
+        Genotype = DArT_IDs  # Genotype column in tracking file = full DArT ID
+      ) %>%
+      select(-DArT_IDs, -Breeder_IDs, -Genotype_processed)
   })
   
   processed_both <- reactive({
     processed() %>%
-      select(DArT_IDs, Breeder_IDs, everything())   # keep both IDs at front
+      mutate(
+        Genotype = Genotype_processed   # keep all columns, overwrite Genotype
+      ) %>%
+      select(
+        DArT_IDs, 
+        Breeder_IDs, 
+        everything(), 
+        -Genotype_processed
+      )
   })
   
   # Keep preview same as before (processed file)
@@ -427,7 +423,9 @@ server <- function(input, output, session) {
       # Write CSV files with na="" so empty cells stay empty
       raw_data() %>% write_csv(original_file, na = "")
       processed_only() %>% write_csv(processed_file, na = "")
-      processed_both() %>% write_csv(both_file, na = "")
+      processed_both() %>%
+        select(-Genotype) %>%
+        write_csv(both_file, na = "")
       
       # Create zip archive using full file paths
       zip::zip(zipfile = file, files = c(original_file, processed_file, both_file), mode = "cherry-pick")
