@@ -5,7 +5,7 @@ account: bi-science
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 16298122
-bundleId: 11311021
+bundleId: 11511560
 url: https://bi-science.shinyapps.io/NameDroppR/
 version: 1
 asMultiple: FALSE
