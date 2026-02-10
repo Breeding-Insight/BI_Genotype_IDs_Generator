@@ -305,6 +305,7 @@ server <- function(input, output, session) {
   # Add at top of server
   go_proceed <- reactiveVal(FALSE)
   
+  
   # Read data (unchanged)
   raw_data <- reactive({
     req(input$dartfile)
